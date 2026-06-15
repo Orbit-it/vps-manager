@@ -81,6 +81,47 @@ ADMIN_PASSWORD_HASH=$2a$12$...
 
 En production (`NODE_ENV=production`), le cookie de session est envoyé en `Secure` (HTTPS obligatoire).
 
+### Exclure le manager de la liste
+
+Le manager ne doit pas apparaître comme une app gérée. Il est exclu automatiquement si :
+
+- son Nginx fait `proxy_pass` vers `127.0.0.1:PORT` (ex. `:3003`)
+- ou son fichier est `vps-manager.conf` / `vps-app-manager.conf`
+- ou son domaine est listé dans `MANAGER_DOMAINS`
+
+Dans `backend/.env` :
+
+```env
+MANAGER_DOMAINS=manager.votredomaine.com
+MANAGER_NGINX_CONFIGS=vps-manager.conf
+```
+
+Puis redémarrez l'app :
+
+```bash
+sudo systemctl restart vps-manager
+```
+
+### Les apps n'apparaissent pas
+
+Le manager scanne par défaut :
+- `/etc/nginx/sites-enabled`
+- `/etc/nginx/conf.d`
+
+Chaque app doit avoir un fichier `.conf` avec un `server_name`.
+
+Si vos configs sont ailleurs, ajoutez dans `.env` :
+
+```env
+NGINX_SCAN_DIRS=/etc/nginx/sites-enabled,/etc/nginx/conf.d,/chemin/custom
+```
+
+Diagnostic API :
+
+```bash
+curl -b cookies.txt https://manager.votredomaine.com/api/apps/scan-debug
+```
+
 ### Clés OVH
 
 1. Créez un token sur [https://eu.api.ovh.com/createToken/](https://eu.api.ovh.com/createToken/)

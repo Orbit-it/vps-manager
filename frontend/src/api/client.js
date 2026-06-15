@@ -55,4 +55,6 @@ export const api = {
     }),
 
   getOvhZones: () => request('/api/apps/ovh/zones'),
+
+  getScanDebug: () => request('/api/apps/scan-debug'),
 };

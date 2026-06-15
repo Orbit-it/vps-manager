@@ -25,6 +25,16 @@ export const config = {
     appSecret: process.env.OVH_APP_SECRET || '',
     consumerKey: process.env.OVH_CONSUMER_KEY || '',
   },
+  manager: {
+    domains: (process.env.MANAGER_DOMAINS || '')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+    nginxConfigs: (process.env.MANAGER_NGINX_CONFIGS || 'vps-manager.conf,vps-app-manager.conf')
+      .split(',')
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  },
 };
 
 export function isOvhConfigured() {

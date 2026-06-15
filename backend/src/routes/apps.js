@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { config, isOvhConfigured } from '../config.js';
-import { listAppsFromNginx, getAppById, testNginxConfig, reloadNginx } from '../services/nginx.js';
+import { listAppsFromNginx, getAppById, testNginxConfig, reloadNginx, scanNginxConfigs } from '../services/nginx.js';
 import { listZones, ensureARecord, getDnsStatusForDomain, getOvhInstructions } from '../services/ovh.js';
 import { runFullHealthCheckSync } from '../services/health.js';
 import { issueCertificate, renewCertificate, getSslStatus } from '../services/ssl.js';
@@ -12,6 +12,20 @@ router.get('/server', async (_req, res) => {
   try {
     const info = await getServerInfo();
     res.json(info);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/scan-debug', async (_req, res) => {
+  try {
+    const scan = await scanNginxConfigs();
+    res.json({
+      ...scan,
+      managerPort: config.port,
+      managerDomains: config.manager.domains,
+      managerNginxConfigs: config.manager.nginxConfigs,
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -33,10 +47,17 @@ router.get('/', async (_req, res) => {
 
     const enriched = await Promise.all(
       apps.map(async (app) => {
-        const ssl = await getSslStatus(app);
+        let sslStatus = 'unknown';
+        try {
+          const ssl = await getSslStatus(app);
+          sslStatus = ssl.status;
+        } catch {
+          sslStatus = 'unknown';
+        }
+
         return {
           ...app,
-          sslStatus: ssl.status,
+          sslStatus,
           primaryDomain: app.domains[0] || null,
           expectedIp: server.publicIp,
         };

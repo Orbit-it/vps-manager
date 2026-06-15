@@ -26,83 +26,237 @@ const DEMO_APPS = [
   },
 ];
 
-function extractServerBlocks(content) {
-  const blocks = [];
-  const regex = /server\s*\{([^{}]*(?:\{[^{}]*\}[^{}]*)*)\}/gs;
-  let match;
+function getScanDirs() {
+  const fromEnv = (process.env.NGINX_SCAN_DIRS || '')
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
 
-  while ((match = regex.exec(content)) !== null) {
-    blocks.push(match[1]);
-  }
+  if (fromEnv.length > 0) return fromEnv;
 
-  return blocks;
+  return [
+    config.nginxSitesEnabled,
+    config.nginxSitesAvailable,
+    '/etc/nginx/conf.d',
+  ].filter((value, index, array) => array.indexOf(value) === index);
 }
 
-function parseBlock(block) {
-  const serverNames = [...block.matchAll(/server_name\s+([^;]+);/g)]
-    .flatMap((m) => m[1].trim().split(/\s+/))
-    .filter((d) => d && d !== '_');
+function isIgnoredDefaultSite(fileName) {
+  const base = fileName.replace(/\.(conf|site)$/, '');
+  return ['default', '000-default'].includes(base);
+}
 
-  const rootMatch = block.match(/root\s+([^;]+);/);
-  const proxyMatch = block.match(/proxy_pass\s+([^;]+);/);
-  const sslCertMatch = block.match(/ssl_certificate\s+([^;]+);/);
+function shouldScanEntry(entry, dir) {
+  if (entry.name.startsWith('.')) return false;
+  if (isIgnoredDefaultSite(entry.name)) return false;
+  if (!entry.isFile() && !entry.isSymbolicLink()) return false;
+
+  const isSitesDir = dir.includes('sites-enabled') || dir.includes('sites-available');
+  if (isSitesDir) return true;
+
+  return isConfigFileName(entry.name);
+}
+
+function isConfigFileName(fileName) {
+  return fileName.endsWith('.conf') || fileName.endsWith('.site');
+}
+
+function getAppIdFromPath(filePath) {
+  return path.basename(filePath).replace(/\.(conf|site)$/, '');
+}
+
+function parseNginxContent(content, filePath) {
+  const domains = [...content.matchAll(/server_name\s+([^;]+);/gi)]
+    .flatMap((match) => match[1].trim().split(/\s+/))
+    .map((domain) => domain.trim())
+    .filter((domain) => domain && domain !== '_' && !domain.startsWith('$'));
+
+  const uniqueDomains = [...new Set(domains)];
+  const rootMatch = content.match(/root\s+([^;]+);/i);
+  const proxyMatches = [...content.matchAll(/proxy_pass\s+([^;]+);/gi)]
+    .map((match) => match[1].trim())
+    .filter((value) => value && !value.startsWith('$') && !value.startsWith('unix:'));
+  const sslCertMatch = content.match(/ssl_certificate\s+([^;]+);/i);
+  const baseName = getAppIdFromPath(filePath);
+
+  if (uniqueDomains.length === 0 && ['default', '000-default'].includes(baseName)) {
+    return null;
+  }
 
   return {
-    domains: [...new Set(serverNames)],
+    id: baseName,
+    name: baseName,
+    configFile: filePath,
+    domains: uniqueDomains.length > 0 ? uniqueDomains : [baseName],
     root: rootMatch ? rootMatch[1].trim() : null,
-    proxyPass: proxyMatch ? proxyMatch[1].trim() : null,
+    proxyPass: proxyMatches[0] || null,
     ssl: Boolean(sslCertMatch),
     sslCertPath: sslCertMatch ? sslCertMatch[1].trim() : null,
+    rawConfig: content,
   };
 }
 
 export async function parseNginxFile(filePath) {
   const content = await fs.readFile(filePath, 'utf8');
-  const blocks = extractServerBlocks(content);
+  return parseNginxContent(content, filePath);
+}
 
-  const parsed = blocks.map(parseBlock).filter((b) => b.domains.length > 0);
-  if (parsed.length === 0) return null;
+function normalizeProxyTarget(proxyPass) {
+  if (!proxyPass) return null;
+  return proxyPass
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .toLowerCase();
+}
 
-  const domains = [...new Set(parsed.flatMap((b) => b.domains))];
-  const sslBlock = parsed.find((b) => b.ssl) || parsed[0];
+export function getManagerExclusionReason(app) {
+  const configFileName = path.basename(app.configFile).toLowerCase();
+  if (config.manager.nginxConfigs.includes(configFileName)) {
+    return `fichier nginx du manager (${configFileName})`;
+  }
+
+  const managerDomains = config.manager.domains;
+  if (managerDomains.length > 0) {
+    const matchedDomain = app.domains
+      .map((domain) => domain.toLowerCase())
+      .find((domain) => managerDomains.includes(domain));
+    if (matchedDomain) {
+      return `domaine du manager (${matchedDomain})`;
+    }
+  }
+
+  const proxyTarget = normalizeProxyTarget(app.proxyPass);
+  if (proxyTarget) {
+    const managerTargets = [
+      `127.0.0.1:${config.port}`,
+      `localhost:${config.port}`,
+      `[::1]:${config.port}`,
+    ];
+    if (managerTargets.includes(proxyTarget)) {
+      return `proxy vers le port du manager (${config.port})`;
+    }
+  }
+
+  return null;
+}
+
+export function isManagerApp(app) {
+  return Boolean(getManagerExclusionReason(app));
+}
+
+async function collectConfigFiles(dir) {
+  try {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    const results = [];
+
+    for (const entry of entries) {
+      if (!shouldScanEntry(entry, dir)) continue;
+      results.push(path.join(dir, entry.name));
+    }
+
+    return results;
+  } catch (error) {
+    return { error: error.message, code: error.code };
+  }
+}
+
+async function resolveConfigPath(filePath) {
+  try {
+    const realPath = await fs.realpath(filePath);
+    return realPath;
+  } catch {
+    return filePath;
+  }
+}
+
+export async function scanNginxConfigs() {
+  if (config.demoMode) {
+    return {
+      scanDirs: [],
+      files: [],
+      parsed: DEMO_APPS.map((app) => ({ app, excluded: false })),
+      apps: DEMO_APPS,
+      excluded: [],
+      errors: [],
+    };
+  }
+
+  const scanDirs = getScanDirs();
+  const files = [];
+  const errors = [];
+  const parsed = [];
+  const excluded = [];
+  const apps = [];
+  const seenPaths = new Set();
+  const seenIds = new Set();
+
+  for (const dir of scanDirs) {
+    const dirFiles = await collectConfigFiles(dir);
+    if (dirFiles.error) {
+      errors.push({ dir, error: dirFiles.error, code: dirFiles.code });
+      continue;
+    }
+
+    for (const filePath of dirFiles) {
+      const resolvedPath = await resolveConfigPath(filePath);
+      if (seenPaths.has(resolvedPath)) continue;
+      seenPaths.add(resolvedPath);
+      files.push({ dir, filePath, resolvedPath });
+    }
+  }
+
+  for (const { dir, filePath, resolvedPath } of files) {
+    try {
+      const app = await parseNginxFile(resolvedPath);
+      if (!app) {
+        parsed.push({ filePath, resolvedPath, dir, status: 'ignored', reason: 'config vide ou default' });
+        continue;
+      }
+
+      app.configFile = filePath;
+      app.id = getAppIdFromPath(resolvedPath);
+      app.name = app.id;
+
+      if (seenIds.has(app.id)) {
+        parsed.push({ filePath, resolvedPath, dir, status: 'duplicate', app });
+        continue;
+      }
+
+      seenIds.add(app.id);
+      const exclusionReason = getManagerExclusionReason(app);
+
+      if (exclusionReason) {
+        excluded.push({ app, reason: exclusionReason });
+        parsed.push({ filePath, resolvedPath, dir, status: 'excluded', app, reason: exclusionReason });
+        continue;
+      }
+
+      const { rawConfig, ...publicApp } = app;
+      apps.push(publicApp);
+      parsed.push({ filePath, resolvedPath, dir, status: 'included', app: publicApp });
+    } catch (error) {
+      errors.push({ filePath, resolvedPath, error: error.message, code: error.code });
+      parsed.push({ filePath, resolvedPath, dir, status: 'error', error: error.message, code: error.code });
+    }
+  }
+
+  apps.sort((a, b) => a.name.localeCompare(b.name));
 
   return {
-    id: path.basename(filePath, '.conf'),
-    name: path.basename(filePath, '.conf'),
-    configFile: filePath,
-    domains,
-    root: parsed.find((b) => b.root)?.root || null,
-    proxyPass: parsed.find((b) => b.proxyPass)?.proxyPass || null,
-    ssl: parsed.some((b) => b.ssl),
-    sslCertPath: sslBlock.sslCertPath,
-    rawConfig: content,
+    scanDirs,
+    processUser: process.getuid?.() ?? null,
+    processGroup: process.getgid?.() ?? null,
+    files,
+    parsed,
+    apps,
+    excluded,
+    errors,
   };
 }
 
 export async function listAppsFromNginx() {
-  if (config.demoMode) {
-    return DEMO_APPS;
-  }
-
-  const files = await fs.readdir(config.nginxSitesEnabled);
-  const apps = [];
-
-  for (const file of files) {
-    if (!file.endsWith('.conf')) continue;
-
-    try {
-      const filePath = path.join(config.nginxSitesEnabled, file);
-      const stat = await fs.stat(filePath);
-      if (!stat.isFile()) continue;
-
-      const app = await parseNginxFile(filePath);
-      if (app) apps.push(app);
-    } catch {
-      // ignore unreadable configs
-    }
-  }
-
-  return apps.sort((a, b) => a.name.localeCompare(b.name));
+  const scan = await scanNginxConfigs();
+  return scan.apps;
 }
 
 export async function getAppById(id) {
