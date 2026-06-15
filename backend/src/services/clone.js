@@ -281,6 +281,8 @@ async function duplicateFrontendShared(sourceApp, sourcePath, destPath, newDomai
   const nginxContent = buildSpaNginxConfig({
     domains: [frontendDomain],
     root: copyResult.nginxRoot,
+    apiProxyPass: sourceApp.proxyPass,
+    sharedApiDomain: apiDomain,
   });
 
   return {

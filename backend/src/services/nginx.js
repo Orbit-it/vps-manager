@@ -278,8 +278,23 @@ export async function reloadNginx() {
   return runPrivilegedCommand('systemctl', ['reload', 'nginx']);
 }
 
-export function buildSpaNginxConfig({ domains, root }) {
+export function buildSpaNginxConfig({ domains, root, apiProxyPass, sharedApiDomain }) {
   const serverName = domains.join(' ');
+
+  const apiLocation = apiProxyPass
+    ? `
+    location /api/ {
+        proxy_pass ${apiProxyPass};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host ${sharedApiDomain || '$host'};
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+    }`
+    : '';
 
   return `server {
     listen 80;
@@ -287,7 +302,7 @@ export function buildSpaNginxConfig({ domains, root }) {
     root ${root};
 
     index index.html;
-
+${apiLocation}
     location / {
         try_files $uri $uri/ /index.html;
     }

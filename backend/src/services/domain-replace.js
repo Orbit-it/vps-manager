@@ -219,6 +219,66 @@ export async function addCorsOriginToBackend(sourceAppPath, frontendDomain) {
   return { origin, updatedFiles };
 }
 
+export async function patchSharedBackendApiUrlsInAssets(rootDir, frontendDomain, sharedApiDomain) {
+  const frontend = frontendDomain?.replace(/^https?:\/\//, '').toLowerCase();
+  const api = sharedApiDomain?.replace(/^https?:\/\//, '').toLowerCase();
+
+  if (!frontend || !api || frontend === api) {
+    return [];
+  }
+
+  const updatedFiles = [];
+
+  async function walk(currentDir) {
+    let entries;
+    try {
+      entries = await fs.readdir(currentDir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+
+    for (const entry of entries) {
+      const fullPath = path.join(currentDir, entry.name);
+
+      if (entry.isDirectory()) {
+        if (SKIP_DIRS.has(entry.name)) continue;
+        await walk(fullPath);
+        continue;
+      }
+
+      if (!entry.isFile() || !COMPILED_FILE_PATTERN.test(entry.name)) continue;
+
+      try {
+        const original = await fs.readFile(fullPath, 'utf8');
+        let content = original;
+        const variants = [
+          [`https://${frontend}/api`, `https://${api}/api`],
+          [`http://${frontend}/api`, `https://${api}/api`],
+          [`//${frontend}/api`, `//${api}/api`],
+          [`wss://${frontend}/api`, `wss://${api}/api`],
+          [`ws://${frontend}/api`, `wss://${api}/api`],
+          [`"${frontend}/api`, `"${api}/api`],
+          [`'${frontend}/api`, `'${api}/api`],
+        ];
+
+        for (const [from, to] of variants) {
+          content = content.split(from).join(to);
+        }
+
+        if (content !== original) {
+          await writeFilePrivileged(fullPath, content);
+          updatedFiles.push(fullPath);
+        }
+      } catch {
+        // ignore unreadable files
+      }
+    }
+  }
+
+  await walk(rootDir);
+  return updatedFiles;
+}
+
 export async function applySharedBackendFrontend(destPath, options) {
   const {
     newFrontendDomain,
@@ -248,6 +308,13 @@ export async function applySharedBackendFrontend(destPath, options) {
   if (domainMap.size > 0) {
     updatedFiles = await walkAndReplace(patchRoot, domainMap, { compiledOnly });
   }
+
+  const apiUrlPatches = await patchSharedBackendApiUrlsInAssets(
+    patchRoot,
+    newFrontendDomain,
+    sharedApiDomain
+  );
+  updatedFiles = [...new Set([...updatedFiles, ...apiUrlPatches])];
 
   if (!compiledOnly) {
     const envValues = {
