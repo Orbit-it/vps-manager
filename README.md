@@ -24,7 +24,8 @@ vps-app-manager/
 ## Installation
 
 ```bash
-cd /home/sdiop/vps-app-manager
+git clone git@github.com:Orbit-it/vps-manager.git
+cd vps-app-manager
 npm run install:all
 cp backend/.env.example backend/.env
 ```
