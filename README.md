@@ -210,7 +210,7 @@ sudo visudo -f /etc/sudoers.d/vps-manager
 Contenu (remplacez `deploy` par votre utilisateur) :
 
 ```
-deploy ALL=(root) NOPASSWD: /usr/bin/cp, /usr/bin/ln, /usr/bin/mkdir, /usr/bin/chown, /usr/sbin/nginx, /bin/systemctl reload nginx, /usr/bin/certbot
+deploy ALL=(root) NOPASSWD: /usr/bin/cp, /usr/bin/ln, /usr/bin/mkdir, /usr/bin/chown, /usr/bin/rm, /usr/sbin/nginx, /bin/systemctl reload nginx, /usr/bin/certbot
 ```
 
 Puis :
@@ -247,6 +247,7 @@ Si `sudo -n` demande un mot de passe, la config sudoers n'est pas correcte.
 | POST | `/api/apps/:id/dns` | Créer/mettre à jour DNS OVH |
 | POST | `/api/apps/:id/ssl` | Générer certificat SSL |
 | POST | `/api/apps/:id/duplicate` | Dupliquer une app |
+| DELETE | `/api/apps/:id` | Supprimer fichiers + config Nginx (+ DNS optionnel) |
 | GET | `/api/apps/ovh/zones` | Lister zones OVH |
 
 ## Mode démo

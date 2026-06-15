@@ -108,7 +108,26 @@ export async function ensureARecord(fqdn, targetIp) {
   return { zone, subDomain, target: targetIp, status: 'created', recordId: result.id || result };
 }
 
-export async function getDnsStatusForDomain(fqdn, expectedIp) {
+export async function deleteARecord(fqdn) {
+  const zone = extractZoneFromDomain(fqdn);
+  const subDomain = extractSubDomain(fqdn, zone);
+  const existing = await findARecord(zone, subDomain);
+
+  if (!existing) {
+    return { zone, subDomain, fqdn, status: 'not_found' };
+  }
+
+  if (config.demoMode) {
+    return { zone, subDomain, fqdn, status: 'deleted', demo: true, recordId: existing.id };
+  }
+
+  const ovhClient = getClient();
+  await ovhClient.requestPromised('DELETE', `/domain/zone/${zone}/record/${existing.id}`);
+  await ovhClient.requestPromised('POST', `/domain/zone/${zone}/refresh`);
+
+  return { zone, subDomain, fqdn, status: 'deleted', recordId: existing.id };
+}
+
   const zone = extractZoneFromDomain(fqdn);
   const subDomain = extractSubDomain(fqdn, zone);
 

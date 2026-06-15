@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api } from '../api/client.js';
 import StatusBadge from '../components/StatusBadge.jsx';
 import DuplicateModal from '../components/DuplicateModal.jsx';
@@ -7,6 +7,7 @@ import SuccessBanner, { formatDuplicateSuccess } from '../components/SuccessBann
 
 export default function AppDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [app, setApp] = useState(null);
   const [health, setHealth] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -85,9 +86,32 @@ export default function AppDetail() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h2 style={{ fontSize: '1.4rem' }}>{app.name}</h2>
-        <button className="btn btn-primary" onClick={() => setShowDuplicate(true)} disabled={actionLoading === 'duplicate'}>
-          {actionLoading === 'duplicate' ? 'Duplication...' : 'Dupliquer'}
-        </button>
+        <div className="actions" style={{ margin: 0 }}>
+          <button className="btn btn-primary" onClick={() => setShowDuplicate(true)} disabled={actionLoading === 'duplicate'}>
+            {actionLoading === 'duplicate' ? 'Duplication...' : 'Dupliquer'}
+          </button>
+          <button
+            className="btn btn-danger"
+            disabled={actionLoading === 'delete'}
+            onClick={() => {
+              const removeDns = window.confirm(
+                'Supprimer aussi l\'enregistrement DNS OVH pour ce domaine ?'
+              );
+              if (!window.confirm(`Supprimer définitivement l'app "${app.name}" ?`)) return;
+
+              runAction(
+                'delete',
+                () => api.deleteApp(id, { removeFiles: true, removeNginx: true, removeDns }),
+                () => {
+                  navigate('/');
+                  return null;
+                }
+              );
+            }}
+          >
+            {actionLoading === 'delete' ? 'Suppression...' : 'Supprimer'}
+          </button>
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

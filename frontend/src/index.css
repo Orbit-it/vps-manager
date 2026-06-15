@@ -166,6 +166,15 @@ a:hover {
   background: var(--border);
 }
 
+.btn-danger {
+  background: #dc2626;
+  color: white;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #b91c1c;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

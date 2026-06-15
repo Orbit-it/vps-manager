@@ -102,7 +102,22 @@ export async function copyDirectoryPrivileged(src, dest) {
   return { src, dest };
 }
 
-export async function writeEnvFilePrivileged(envPath, content) {
+export async function removePathPrivileged(targetPath) {
+  if (config.demoMode) {
+    return { path: targetPath, demo: true };
+  }
+
+  const result = config.useSudo
+    ? await runCommand('sudo', ['-n', 'rm', '-rf', targetPath])
+    : await runCommand('rm', ['-rf', targetPath]);
+
+  if (!result.ok) {
+    throw new Error(result.stderr || `Impossible de supprimer ${targetPath}`);
+  }
+
+  return { path: targetPath };
+}
+
   if (config.demoMode) return { envPath, demo: true };
 
   try {

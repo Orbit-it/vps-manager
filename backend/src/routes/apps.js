@@ -5,6 +5,7 @@ import { listZones, ensureARecord, getDnsStatusForDomain, getOvhInstructions } f
 import { runFullHealthCheckSync } from '../services/health.js';
 import { issueCertificate, renewCertificate, getSslStatus } from '../services/ssl.js';
 import { duplicateApp, getServerInfo } from '../services/clone.js';
+import { deleteApp } from '../services/delete.js';
 
 const router = Router();
 
@@ -200,6 +201,19 @@ router.post('/:id/duplicate', async (req, res) => {
       sharedApiDomain,
     });
 
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.delete('/:id', async (req, res) => {
+  try {
+    const result = await deleteApp(req.params.id, {
+      removeFiles: req.body?.removeFiles !== false,
+      removeNginx: req.body?.removeNginx !== false,
+      removeDns: req.body?.removeDns === true,
+    });
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });

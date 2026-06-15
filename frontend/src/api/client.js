@@ -54,6 +54,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
+  deleteApp: (id, body = {}) =>
+    request(`/api/apps/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify(body),
+    }),
+
   getOvhZones: () => request('/api/apps/ovh/zones'),
 
   getScanDebug: () => request('/api/apps/scan-debug'),
