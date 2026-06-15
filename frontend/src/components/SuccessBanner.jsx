@@ -42,7 +42,7 @@ export function formatDuplicateSuccess(result) {
     warnings.push(`Backend partagé : ${clone.sharedApiDomain || clone.apiUrl}`);
     warnings.push('Redémarrez le backend source pour appliquer le CORS (pm2 restart ou systemctl).');
   }
-  if (steps.some((step) => step.includes('Fichiers compilés détectés'))) {
+  if (steps.some((step) => step.reason?.includes('Fichiers compilés détectés'))) {
     warnings.push('Frontend compilé : l\'URL API est patchée directement dans les fichiers JS/CSS.');
   }
   if (corsUpdate && corsUpdate.updatedFiles?.length === 0) {
