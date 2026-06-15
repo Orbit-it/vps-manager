@@ -171,7 +171,7 @@ router.post('/:id/ssl/renew', async (req, res) => {
 
 router.post('/:id/duplicate', async (req, res) => {
   try {
-    const { newName, newDomains, copyFiles, createDns, enableSsl, targetIp } = req.body;
+    const { newName, newDomains, copyFiles, createDns, enableSsl, targetIp, rebuildFrontend } = req.body;
 
     if (!newName || !newDomains?.length) {
       return res.status(400).json({ error: 'newName et newDomains sont requis' });
@@ -185,6 +185,7 @@ router.post('/:id/duplicate', async (req, res) => {
       copyFiles: copyFiles !== false,
       createDns: createDns !== false,
       enableSsl: enableSsl === true,
+      rebuildFrontend: rebuildFrontend === true,
     });
 
     res.json(result);

@@ -8,6 +8,7 @@ export default function DuplicateModal({ app, onClose, onSubmit }) {
   const [copyFiles, setCopyFiles] = useState(true);
   const [createDns, setCreateDns] = useState(true);
   const [enableSsl, setEnableSsl] = useState(false);
+  const [rebuildFrontend, setRebuildFrontend] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
@@ -23,6 +24,7 @@ export default function DuplicateModal({ app, onClose, onSubmit }) {
         copyFiles,
         createDns,
         enableSsl,
+        rebuildFrontend,
       });
       onClose();
     } catch (err) {
@@ -47,6 +49,9 @@ export default function DuplicateModal({ app, onClose, onSubmit }) {
 
           <div className="form-group">
             <label>Domaines (un par ligne)</label>
+            <p className="field-hint">
+              Ligne 1 : frontend (ex. crazyavis.kaptainfry.fr) — Ligne 2 : API si séparée (ex. api.crazyavis.kaptainfry.fr)
+            </p>
             <textarea
               value={newDomains}
               onChange={(e) => setNewDomains(e.target.value)}
@@ -66,6 +71,10 @@ export default function DuplicateModal({ app, onClose, onSubmit }) {
             <label>
               <input type="checkbox" checked={enableSsl} onChange={(e) => setEnableSsl(e.target.checked)} />
               Générer SSL Let's Encrypt (après DNS)
+            </label>
+            <label>
+              <input type="checkbox" checked={rebuildFrontend} onChange={(e) => setRebuildFrontend(e.target.checked)} />
+              Rebuilder le frontend (recommandé — met à jour l'URL API)
             </label>
           </div>
 
