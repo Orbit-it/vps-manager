@@ -278,6 +278,23 @@ export async function reloadNginx() {
   return runPrivilegedCommand('systemctl', ['reload', 'nginx']);
 }
 
+export function buildSpaNginxConfig({ domains, root }) {
+  const serverName = domains.join(' ');
+
+  return `server {
+    listen 80;
+    server_name ${serverName};
+    root ${root};
+
+    index index.html;
+
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+}
+`;
+}
+
 export function buildNginxConfig({ domains, root, proxyPass }) {
   const serverName = domains.join(' ');
   const mainDomain = domains[0];

@@ -4,26 +4,8 @@ import { writeFilePrivileged } from './shell.js';
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'vendor', '.next', 'cache']);
 const ENV_FILE_PATTERN = /^\.env(\..+)?$/;
-const DIST_FILE_PATTERN = /\.(js|css|html|json|map)$/;
-
-const URL_ENV_KEYS = [
-  'APP_URL',
-  'API_URL',
-  'VITE_API_URL',
-  'VITE_APP_URL',
-  'VITE_BACKEND_URL',
-  'NEXT_PUBLIC_API_URL',
-  'NEXT_PUBLIC_APP_URL',
-  'NEXT_PUBLIC_BACKEND_URL',
-  'REACT_APP_API_URL',
-  'PUBLIC_URL',
-  'FRONTEND_URL',
-  'CLIENT_URL',
-  'CORS_ORIGIN',
-  'ALLOWED_ORIGINS',
-  'CORS_ALLOWED_ORIGINS',
-  'ORIGIN',
-];
+const COMPILED_FILE_PATTERN = /\.(js|css|html|json|map|txt)$/;
+const CORS_ENV_KEYS = ['ALLOWED_ORIGINS', 'CORS_ALLOWED_ORIGINS', 'CORS_ORIGIN'];
 
 export function buildDomainMap(sourceDomains, newDomains) {
   const map = new Map();
@@ -57,6 +39,16 @@ function replaceDomainsInText(content, domainMap) {
   return result;
 }
 
+function appendOriginToEnvValue(currentValue, origin) {
+  const values = currentValue
+    .split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  if (values.includes(origin)) return currentValue;
+  return [...values, origin].join(',');
+}
+
 async function updateEnvKeys(envPath, values) {
   try {
     let content = await fs.readFile(envPath, 'utf8');
@@ -78,7 +70,8 @@ async function updateEnvKeys(envPath, values) {
   }
 }
 
-async function walkAndReplace(rootDir, domainMap) {
+async function walkAndReplace(rootDir, domainMap, options = {}) {
+  const { compiledOnly = false } = options;
   const updatedFiles = [];
 
   async function walk(currentDir) {
@@ -101,9 +94,11 @@ async function walkAndReplace(rootDir, domainMap) {
       if (!entry.isFile()) continue;
 
       const isEnvFile = ENV_FILE_PATTERN.test(entry.name);
-      const isDistFile = fullPath.includes(`${path.sep}dist${path.sep}`) && DIST_FILE_PATTERN.test(entry.name);
+      const isCompiledFile = COMPILED_FILE_PATTERN.test(entry.name);
+      const isDistFile = fullPath.includes(`${path.sep}dist${path.sep}`) && COMPILED_FILE_PATTERN.test(entry.name);
 
-      if (!isEnvFile && !isDistFile) continue;
+      if (!isEnvFile && !isCompiledFile && !(compiledOnly && isDistFile)) continue;
+      if (compiledOnly && !isCompiledFile) continue;
 
       try {
         const content = await fs.readFile(fullPath, 'utf8');
@@ -170,5 +165,118 @@ export async function applyDomainMigration(appPath, sourceDomains, newDomains) {
     apiUrl,
     updatedFiles: [...new Set([...updatedFiles, ...envFilesUpdated])],
     rebuildRecommended: updatedFiles.some((file) => file.includes('/dist/')),
+  };
+}
+
+export async function addCorsOriginToBackend(sourceAppPath, frontendDomain) {
+  const origin = frontendDomain.startsWith('http')
+    ? frontendDomain
+    : `https://${frontendDomain}`;
+
+  const backendDirs = [
+    sourceAppPath,
+    path.join(sourceAppPath, 'backend'),
+    path.join(sourceAppPath, 'api'),
+    path.join(sourceAppPath, 'server'),
+  ];
+
+  const updatedFiles = [];
+
+  for (const dir of backendDirs) {
+    for (const envName of ['.env', '.env.local', '.env.production']) {
+      const envPath = path.join(dir, envName);
+
+      try {
+        let content = await fs.readFile(envPath, 'utf8');
+        let changed = false;
+
+        for (const key of CORS_ENV_KEYS) {
+          const regex = new RegExp(`^${key}=(.*)$`, 'm');
+          const match = content.match(regex);
+
+          if (match) {
+            const nextValue = appendOriginToEnvValue(match[1], origin);
+            if (nextValue !== match[1]) {
+              content = content.replace(regex, `${key}=${nextValue}`);
+              changed = true;
+            }
+          } else if (key === 'ALLOWED_ORIGINS') {
+            content += `\n${key}=${origin}`;
+            changed = true;
+          }
+        }
+
+        if (changed) {
+          await writeFilePrivileged(envPath, content);
+          updatedFiles.push(envPath);
+        }
+      } catch {
+        // ignore missing env files
+      }
+    }
+  }
+
+  return { origin, updatedFiles };
+}
+
+export async function applySharedBackendFrontend(destPath, options) {
+  const {
+    newFrontendDomain,
+    sharedApiDomain,
+    sourceFrontendDomain,
+    servePath,
+    compiledOnly = false,
+  } = options;
+
+  const frontendUrl = `https://${newFrontendDomain}`;
+  const apiUrl = `https://${sharedApiDomain}`;
+  const patchRoot = servePath || path.join(destPath, 'frontend');
+  const domainMap = new Map();
+
+  // Ne pas remplacer le domaine API dans les assets compilés.
+  // Si frontend et API étaient sur le même domaine (ex: avis.kaptainfry.fr),
+  // les appels API doivent continuer à pointer vers le backend partagé.
+  if (
+    sourceFrontendDomain &&
+    sourceFrontendDomain !== newFrontendDomain &&
+    sourceFrontendDomain !== sharedApiDomain
+  ) {
+    domainMap.set(sourceFrontendDomain.toLowerCase(), newFrontendDomain);
+  }
+
+  let updatedFiles = [];
+  if (domainMap.size > 0) {
+    updatedFiles = await walkAndReplace(patchRoot, domainMap, { compiledOnly });
+  }
+
+  if (!compiledOnly) {
+    const envValues = {
+      APP_URL: frontendUrl,
+      FRONTEND_URL: frontendUrl,
+      CLIENT_URL: frontendUrl,
+      PUBLIC_URL: frontendUrl,
+      VITE_APP_URL: frontendUrl,
+      VITE_API_URL: apiUrl,
+      VITE_BACKEND_URL: apiUrl,
+      NEXT_PUBLIC_APP_URL: frontendUrl,
+      NEXT_PUBLIC_API_URL: apiUrl,
+      REACT_APP_API_URL: apiUrl,
+    };
+
+    const frontendPath = path.join(destPath, 'frontend');
+    for (const envName of ['.env', '.env.local', '.env.production']) {
+      const envPath = path.join(frontendPath, envName);
+      const updated = await updateEnvKeys(envPath, envValues);
+      if (updated) updatedFiles.push(envPath);
+    }
+  }
+
+  return {
+    frontendUrl,
+    apiUrl,
+    sharedApiDomain,
+    compiledOnly,
+    updatedFiles: [...new Set(updatedFiles)],
+    rebuildRecommended: !compiledOnly,
   };
 }
