@@ -128,6 +128,7 @@ export async function deleteARecord(fqdn) {
   return { zone, subDomain, fqdn, status: 'deleted', recordId: existing.id };
 }
 
+export async function getDnsStatusForDomain(fqdn, expectedIp) {
   const zone = extractZoneFromDomain(fqdn);
   const subDomain = extractSubDomain(fqdn, zone);
 

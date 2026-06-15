@@ -118,6 +118,7 @@ export async function removePathPrivileged(targetPath) {
   return { path: targetPath };
 }
 
+export async function writeEnvFilePrivileged(envPath, content) {
   if (config.demoMode) return { envPath, demo: true };
 
   try {
