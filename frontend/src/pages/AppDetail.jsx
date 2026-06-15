@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { api } from '../api/client.js';
 import StatusBadge from '../components/StatusBadge.jsx';
 import DuplicateModal from '../components/DuplicateModal.jsx';
+import SuccessBanner, { formatDuplicateSuccess } from '../components/SuccessBanner.jsx';
 
 export default function AppDetail() {
   const { id } = useParams();
@@ -11,6 +12,7 @@ export default function AppDetail() {
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(null);
   const [message, setMessage] = useState(null);
+  const [successNotification, setSuccessNotification] = useState(null);
   const [error, setError] = useState(null);
   const [showDuplicate, setShowDuplicate] = useState(false);
 
@@ -34,13 +36,32 @@ export default function AppDetail() {
     loadApp();
   }, [loadApp]);
 
-  async function runAction(name, fn) {
+  async function runAction(name, fn, formatMessage) {
     setActionLoading(name);
     setMessage(null);
+    setSuccessNotification(null);
     setError(null);
     try {
       const result = await fn();
-      setMessage(JSON.stringify(result, null, 2));
+      setMessage(formatMessage ? formatMessage(result) : 'Action effectuée avec succès.');
+      await loadApp();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleDuplicate(body) {
+    setActionLoading('duplicate');
+    setError(null);
+    setMessage(null);
+    setSuccessNotification(null);
+
+    try {
+      const result = await api.duplicate(id, body);
+      setShowDuplicate(false);
+      setSuccessNotification(formatDuplicateSuccess(result));
       await loadApp();
     } catch (err) {
       setError(err.message);
@@ -52,6 +73,7 @@ export default function AppDetail() {
   function copyDns(text) {
     navigator.clipboard.writeText(text);
     setMessage('Configuration DNS copiée !');
+    setSuccessNotification(null);
   }
 
   if (loading) return <div className="loading">Chargement...</div>;
@@ -63,16 +85,20 @@ export default function AppDetail() {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
         <h2 style={{ fontSize: '1.4rem' }}>{app.name}</h2>
-        <button className="btn btn-primary" onClick={() => setShowDuplicate(true)}>
-          Dupliquer
+        <button className="btn btn-primary" onClick={() => setShowDuplicate(true)} disabled={actionLoading === 'duplicate'}>
+          {actionLoading === 'duplicate' ? 'Duplication...' : 'Dupliquer'}
         </button>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
-      {message && (
-        <div className="alert alert-success">
-          <pre style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '0.8rem' }}>{message}</pre>
-        </div>
+
+      <SuccessBanner
+        notification={successNotification}
+        onDismiss={() => setSuccessNotification(null)}
+      />
+
+      {message && !successNotification && (
+        <div className="alert alert-success">{message}</div>
       )}
 
       <div className="grid grid-2">
@@ -144,7 +170,7 @@ export default function AppDetail() {
             <button
               className="btn btn-primary"
               disabled={actionLoading === 'dns' || !app.ovhConfigured}
-              onClick={() => runAction('dns', () => api.createDns(id, { domains: [dns.fqdn] }))}
+              onClick={() => runAction('dns', () => api.createDns(id, { domains: [dns.fqdn] }), () => 'Enregistrement DNS créé ou mis à jour avec succès.')}
             >
               {actionLoading === 'dns' ? 'Création...' : 'Créer via API OVH'}
             </button>
@@ -164,14 +190,14 @@ export default function AppDetail() {
           <button
             className="btn btn-primary"
             disabled={actionLoading === 'ssl'}
-            onClick={() => runAction('ssl', () => api.enableSsl(id))}
+            onClick={() => runAction('ssl', () => api.enableSsl(id), () => 'Certificat SSL généré avec succès.')}
           >
             {actionLoading === 'ssl' ? 'Génération...' : 'Générer SSL'}
           </button>
           <button
             className="btn btn-secondary"
             disabled={actionLoading === 'renew'}
-            onClick={() => runAction('renew', () => api.renewSsl(id))}
+            onClick={() => runAction('renew', () => api.renewSsl(id), () => 'Certificat SSL renouvelé avec succès.')}
           >
             {actionLoading === 'renew' ? 'Renouvellement...' : 'Renouveler SSL'}
           </button>
@@ -182,7 +208,7 @@ export default function AppDetail() {
         <DuplicateModal
           app={app}
           onClose={() => setShowDuplicate(false)}
-          onSubmit={(body) => api.duplicate(id, body)}
+          onSubmit={handleDuplicate}
         />
       )}
     </>

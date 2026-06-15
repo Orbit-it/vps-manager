@@ -375,6 +375,61 @@ a:hover {
   margin-bottom: 24px;
 }
 
+.success-banner {
+  margin-bottom: 16px;
+}
+
+.success-banner-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.btn-dismiss {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+  padding: 0 4px;
+}
+
+.btn-dismiss:hover {
+  opacity: 1;
+}
+
+.success-steps {
+  margin: 0 0 12px 18px;
+  font-size: 0.875rem;
+}
+
+.success-steps li {
+  margin-bottom: 4px;
+}
+
+.success-details {
+  font-size: 0.875rem;
+  margin-bottom: 12px;
+}
+
+.success-details p {
+  margin: 4px 0;
+}
+
+.success-details span {
+  color: rgba(134, 239, 172, 0.85);
+}
+
+.success-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .login-btn {
   width: 100%;
   justify-content: center;
