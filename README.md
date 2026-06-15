@@ -147,6 +147,46 @@ npm run build
 npm run start
 ```
 
+### Service systemd (recommandé)
+
+Le service n'existe pas par défaut — il faut le créer une fois :
+
+```bash
+# 1. Vérifier le chemin de node
+which node
+# ex: /usr/bin/node
+
+# 2. Adapter deploy/vps-manager.service si besoin :
+#    - User=deploy
+#    - WorkingDirectory=/var/www/vps-manager/backend
+#    - ExecStart=/usr/bin/node src/index.js
+
+# 3. Installer le service
+sudo cp deploy/vps-manager.service /etc/systemd/system/vps-manager.service
+sudo systemctl daemon-reload
+sudo systemctl enable vps-manager
+sudo systemctl start vps-manager
+sudo systemctl status vps-manager
+```
+
+Commandes utiles :
+
+```bash
+sudo systemctl restart vps-manager
+sudo journalctl -u vps-manager -f
+```
+
+Si vous lancez l'app manuellement (sans systemd), redémarrez avec :
+
+```bash
+# Arrêter l'ancien processus
+pkill -f "node src/index.js"
+
+# Relancer
+cd /var/www/vps-manager/backend
+npm run start
+```
+
 ## Déploiement sur VPS
 
 L'app tourne avec un utilisateur non-root (ex: `deploy`) et utilise **sudo** pour les opérations privilégiées.

@@ -1,0 +1,17 @@
+[Unit]
+Description=VPS App Manager
+After=network.target nginx.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+WorkingDirectory=/var/www/vps-manager/backend
+Environment=NODE_ENV=production
+EnvironmentFile=-/var/www/vps-manager/backend/.env
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

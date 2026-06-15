@@ -8,7 +8,12 @@ import { authMiddleware } from './middleware/auth.js';
 import authRouter from './routes/auth.js';
 import appsRouter from './routes/apps.js';
 
-validateAuthConfig();
+try {
+  validateAuthConfig();
+} catch (error) {
+  console.error('Erreur de configuration:', error.message);
+  process.exit(1);
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -49,4 +54,11 @@ app.listen(config.port, () => {
   console.log(`VPS App Manager — http://localhost:${config.port}`);
   console.log(`Mode: ${config.demoMode ? 'DEMO' : 'PRODUCTION'}`);
   console.log(`Auth: utilisateur "${config.auth.adminUsername}"`);
+}).on('error', (error) => {
+  if (error.code === 'EADDRINUSE') {
+    console.error(`Erreur: le port ${config.port} est déjà utilisé. Arrêtez l'ancien processus ou changez PORT dans .env`);
+  } else {
+    console.error('Erreur au démarrage:', error.message);
+  }
+  process.exit(1);
 });

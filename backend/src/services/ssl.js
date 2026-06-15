@@ -1,7 +1,35 @@
+import fs from 'node:fs/promises';
 import { config } from '../config.js';
 import { runCommand, runPrivilegedCommand } from './shell.js';
 import { getCertificateInfo } from './health.js';
 import { reloadNginx, testNginxConfig } from './nginx.js';
+
+async function checkCertFile(certPath, domain) {
+  try {
+    await fs.access(certPath);
+    const result = await runCommand('openssl', [
+      'x509',
+      '-in', certPath,
+      '-noout',
+      '-issuer',
+      '-enddate',
+    ]);
+
+    if (!result.ok) {
+      return { domain, exists: false, path: certPath };
+    }
+
+    const endMatch = result.stdout.match(/notAfter=(.+)/);
+    return {
+      domain,
+      exists: true,
+      path: certPath,
+      validTo: endMatch?.[1] || null,
+    };
+  } catch {
+    return { domain, exists: false, path: certPath };
+  }
+}
 
 export async function issueCertificate(domains, email) {
   const certbotEmail = email || config.certbotEmail;
@@ -77,6 +105,40 @@ export async function listCertificates() {
 }
 
 export async function getSslStatus(app) {
+  if (config.demoMode) {
+    return {
+      status: app.ssl ? 'active' : 'missing',
+      domains: app.domains.map((domain) => ({ domain, exists: app.ssl })),
+    };
+  }
+
+  if (app.sslCertPath) {
+    const certInfo = await checkCertFile(app.sslCertPath, app.domains[0]);
+    if (certInfo.exists) {
+      return {
+        status: 'active',
+        source: 'nginx',
+        domains: app.domains.map((domain) => ({ ...certInfo, domain })),
+      };
+    }
+
+    if (app.ssl) {
+      return {
+        status: 'configured',
+        source: 'nginx',
+        domains: app.domains.map((domain) => ({ domain, exists: true, fromNginx: true })),
+      };
+    }
+  }
+
+  if (app.ssl) {
+    return {
+      status: 'configured',
+      source: 'nginx',
+      domains: app.domains.map((domain) => ({ domain, exists: true, fromNginx: true })),
+    };
+  }
+
   const statuses = await Promise.all(
     app.domains.map(async (domain) => ({
       domain,
@@ -85,8 +147,10 @@ export async function getSslStatus(app) {
   );
 
   const allActive = statuses.every((s) => s.exists);
+  const anyActive = statuses.some((s) => s.exists);
+
   return {
-    status: allActive ? 'active' : 'missing',
+    status: allActive ? 'active' : anyActive ? 'partial' : 'missing',
     domains: statuses,
   };
 }
