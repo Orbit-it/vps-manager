@@ -1,13 +1,17 @@
 import dotenv from 'dotenv';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-dotenv.config({
-  path: '/var/www/vps-manager/backend/.env'
-});
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+dotenv.config({ path: path.join(__dirname, '../.env') });
 
 export const config = {
   port: Number(process.env.PORT) || 3001,
   isProduction: process.env.NODE_ENV === 'production',
   demoMode: process.env.DEMO_MODE === 'true',
+  useSudo: process.env.USE_SUDO !== 'false',
+  deployUser: process.env.DEPLOY_USER || process.env.USER || '',
+  webGroup: process.env.WEB_GROUP || 'www-data',
   auth: {
     adminUsername: process.env.ADMIN_USERNAME || 'admin',
     adminPassword: process.env.ADMIN_PASSWORD || '',

@@ -1,5 +1,5 @@
 import { config } from '../config.js';
-import { runCommand } from './shell.js';
+import { runCommand, runPrivilegedCommand } from './shell.js';
 import { getCertificateInfo } from './health.js';
 import { reloadNginx, testNginxConfig } from './nginx.js';
 
@@ -17,7 +17,7 @@ export async function issueCertificate(domains, email) {
     };
   }
 
-  const result = await runCommand('certbot', [
+  const result = await runPrivilegedCommand('certbot', [
     '--nginx',
     ...domainArgs,
     '--non-interactive',
@@ -52,7 +52,7 @@ export async function renewCertificate(domain) {
     return { ok: true, domain, message: 'Renouvellement simulé', demo: true };
   }
 
-  const result = await runCommand('certbot', ['renew', '--cert-name', domain, '--quiet']);
+  const result = await runPrivilegedCommand('certbot', ['renew', '--cert-name', domain, '--quiet']);
   if (result.ok) {
     await reloadNginx();
   }
@@ -72,7 +72,7 @@ export async function listCertificates() {
     ];
   }
 
-  const result = await runCommand('certbot', ['certificates']);
+  const result = await runPrivilegedCommand('certbot', ['certificates']);
   return { raw: result.stdout, ok: result.ok };
 }
 

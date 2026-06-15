@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { config } from '../config.js';
-import { runCommand } from './shell.js';
+import { runCommand, runPrivilegedCommand, writeFilePrivileged, ensureSymlinkPrivileged } from './shell.js';
 
 const DEMO_APPS = [
   {
@@ -268,14 +268,14 @@ export async function testNginxConfig() {
   if (config.demoMode) {
     return { ok: true, stdout: 'nginx: configuration file test is successful (demo)' };
   }
-  return runCommand('nginx', ['-t']);
+  return runPrivilegedCommand('nginx', ['-t']);
 }
 
 export async function reloadNginx() {
   if (config.demoMode) {
     return { ok: true, stdout: 'nginx reloaded (demo)' };
   }
-  return runCommand('systemctl', ['reload', 'nginx']);
+  return runPrivilegedCommand('systemctl', ['reload', 'nginx']);
 }
 
 export function buildNginxConfig({ domains, root, proxyPass }) {
@@ -328,12 +328,12 @@ export async function writeNginxConfig(name, content) {
   const availablePath = path.join(config.nginxSitesAvailable, `${name}.conf`);
   const enabledPath = path.join(config.nginxSitesEnabled, `${name}.conf`);
 
-  await fs.writeFile(availablePath, content, 'utf8');
+  await writeFilePrivileged(availablePath, content);
 
   try {
     await fs.access(enabledPath);
   } catch {
-    await fs.symlink(availablePath, enabledPath);
+    await ensureSymlinkPrivileged(availablePath, enabledPath);
   }
 
   return { availablePath, enabledPath };

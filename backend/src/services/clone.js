@@ -4,29 +4,7 @@ import { config } from '../config.js';
 import { buildNginxConfig, getAppById, writeNginxConfig, reloadNginx, testNginxConfig } from './nginx.js';
 import { ensureARecord } from './ovh.js';
 import { issueCertificate } from './ssl.js';
-import { runCommand } from './shell.js';
-
-async function copyDirectory(src, dest) {
-  if (config.demoMode) {
-    return { src, dest, demo: true };
-  }
-
-  await fs.mkdir(dest, { recursive: true });
-  const entries = await fs.readdir(src, { withFileTypes: true });
-
-  for (const entry of entries) {
-    const srcPath = path.join(src, entry.name);
-    const destPath = path.join(dest, entry.name);
-
-    if (entry.isDirectory()) {
-      await copyDirectory(srcPath, destPath);
-    } else {
-      await fs.copyFile(srcPath, destPath);
-    }
-  }
-
-  return { src, dest };
-}
+import { runCommand, copyDirectoryPrivileged, writeEnvFilePrivileged } from './shell.js';
 
 async function updateEnvFile(appPath, replacements) {
   const envPath = path.join(appPath, '.env');
@@ -47,7 +25,7 @@ async function updateEnvFile(appPath, replacements) {
       }
     }
 
-    await fs.writeFile(envPath, content, 'utf8');
+    await writeEnvFilePrivileged(envPath, content);
     return { envPath, updated: true };
   } catch {
     return { envPath, updated: false, skipped: true };
@@ -81,7 +59,7 @@ export async function duplicateApp(sourceId, options) {
   const steps = [];
 
   if (copyFiles) {
-    const copyResult = await copyDirectory(sourcePath, destPath);
+    const copyResult = await copyDirectoryPrivileged(sourcePath, destPath);
     steps.push({ step: 'copy_files', ok: true, ...copyResult });
 
     const envUpdates = {};
@@ -94,7 +72,7 @@ export async function duplicateApp(sourceId, options) {
 
   const nginxContent = buildNginxConfig({
     domains: newDomains,
-    root: sourceApp.root ? destPath + '/public' : null,
+    root: sourceApp.root ? `${destPath}/public` : null,
     proxyPass: sourceApp.proxyPass,
   });
 
@@ -157,6 +135,7 @@ export async function getServerInfo() {
   return {
     publicIp,
     demoMode: config.demoMode,
+    useSudo: config.useSudo,
     appsRoot: config.appsRoot,
     nginxSitesEnabled: config.nginxSitesEnabled,
   };

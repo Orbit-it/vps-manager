@@ -149,19 +149,53 @@ npm run start
 
 ## Déploiement sur VPS
 
-L'app doit tourner avec les droits nécessaires pour :
+L'app tourne avec un utilisateur non-root (ex: `deploy`) et utilise **sudo** pour les opérations privilégiées.
 
-- Lire `/etc/nginx/sites-enabled/`
+Dans `backend/.env` :
+
+```env
+USE_SUDO=true
+DEPLOY_USER=deploy
+WEB_GROUP=www-data
+```
+
+### Configuration sudoers (obligatoire)
+
+Créez `/etc/sudoers.d/vps-manager` avec `visudo` :
+
+```bash
+sudo visudo -f /etc/sudoers.d/vps-manager
+```
+
+Contenu (remplacez `deploy` par votre utilisateur) :
+
+```
+deploy ALL=(root) NOPASSWD: /usr/bin/cp, /usr/bin/ln, /usr/bin/mkdir, /usr/bin/chown, /usr/sbin/nginx, /bin/systemctl reload nginx, /usr/bin/certbot
+```
+
+Puis :
+
+```bash
+sudo chmod 440 /etc/sudoers.d/vps-manager
+sudo systemctl restart vps-manager
+```
+
+Test manuel :
+
+```bash
+sudo -n cp /tmp/test.conf /etc/nginx/sites-available/test.conf
+sudo -n nginx -t
+sudo -n systemctl reload nginx
+```
+
+Si `sudo -n` demande un mot de passe, la config sudoers n'est pas correcte.
+
+### Opérations concernées
+
 - Écrire dans `/etc/nginx/sites-available/`
-- Exécuter `nginx -t`, `systemctl reload nginx`
-- Exécuter `certbot --nginx`
+- Créer les symlinks dans `/etc/nginx/sites-enabled/`
 - Copier les fichiers dans `/var/www/`
-
-Exemple sudoers (`visudo`) :
-
-```
-deploy ALL=(root) NOPASSWD: /usr/bin/certbot, /usr/sbin/nginx, /bin/systemctl reload nginx
-```
+- Exécuter `nginx -t`, `systemctl reload nginx`, `certbot`
 
 ## API
 
