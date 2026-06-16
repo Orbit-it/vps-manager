@@ -219,15 +219,19 @@ export async function addCorsOriginToBackend(sourceAppPath, frontendDomain) {
   return { origin, updatedFiles };
 }
 
-export async function patchSharedBackendApiUrlsInAssets(rootDir, frontendDomain, sharedApiDomain) {
+export async function patchSharedBackendApiUrlsInAssets(rootDir, frontendDomain, sharedApiDomain, options = {}) {
+  const { aggressive = false } = options;
   const frontend = frontendDomain?.replace(/^https?:\/\//, '').toLowerCase();
   const api = sharedApiDomain?.replace(/^https?:\/\//, '').toLowerCase();
 
-  if (!frontend || !api || frontend === api) {
-    return [];
-  }
+  if (!api) return [];
 
   const updatedFiles = [];
+  const zoneSuffix = api.includes('.') ? api.split('.').slice(-2).join('.') : api;
+  const apiUrlRegex = new RegExp(
+    `(https?://)([a-z0-9-]+\\.${zoneSuffix.replace(/\./g, '\\.')})(/api[^"'\\s]*)`,
+    'gi'
+  );
 
   async function walk(currentDir) {
     let entries;
@@ -251,18 +255,28 @@ export async function patchSharedBackendApiUrlsInAssets(rootDir, frontendDomain,
       try {
         const original = await fs.readFile(fullPath, 'utf8');
         let content = original;
-        const variants = [
-          [`https://${frontend}/api`, `https://${api}/api`],
-          [`http://${frontend}/api`, `https://${api}/api`],
-          [`//${frontend}/api`, `//${api}/api`],
-          [`wss://${frontend}/api`, `wss://${api}/api`],
-          [`ws://${frontend}/api`, `wss://${api}/api`],
-          [`"${frontend}/api`, `"${api}/api`],
-          [`'${frontend}/api`, `'${api}/api`],
-        ];
 
-        for (const [from, to] of variants) {
-          content = content.split(from).join(to);
+        if (frontend && frontend !== api) {
+          const variants = [
+            [`https://${frontend}/api`, `https://${api}/api`],
+            [`http://${frontend}/api`, `https://${api}/api`],
+            [`//${frontend}/api`, `//${api}/api`],
+            [`wss://${frontend}/api`, `wss://${api}/api`],
+            [`ws://${frontend}/api`, `wss://${api}/api`],
+            [`"${frontend}/api`, `"${api}/api`],
+            [`'${frontend}/api`, `'${api}/api`],
+          ];
+
+          for (const [from, to] of variants) {
+            content = content.split(from).join(to);
+          }
+        }
+
+        if (aggressive) {
+          content = content.replace(apiUrlRegex, (match, protocol, domain, apiPath) => {
+            if (domain.toLowerCase() === api) return match;
+            return `${protocol}${api}${apiPath}`;
+          });
         }
 
         if (content !== original) {
@@ -312,7 +326,8 @@ export async function applySharedBackendFrontend(destPath, options) {
   const apiUrlPatches = await patchSharedBackendApiUrlsInAssets(
     patchRoot,
     newFrontendDomain,
-    sharedApiDomain
+    sharedApiDomain,
+    { aggressive: true }
   );
   updatedFiles = [...new Set([...updatedFiles, ...apiUrlPatches])];
 

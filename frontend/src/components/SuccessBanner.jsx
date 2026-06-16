@@ -124,6 +124,16 @@ export default function SuccessBanner({ notification, onDismiss }) {
 
       {appId && (
         <div className="success-actions">
+          {frontendUrl && (
+            <a
+              href={frontendUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-primary"
+            >
+              Voir l'application
+            </a>
+          )}
           <Link to={`/apps/${appId}`} className="btn btn-secondary">
             Voir la nouvelle app
           </Link>

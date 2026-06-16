@@ -6,6 +6,7 @@ import { runFullHealthCheckSync } from '../services/health.js';
 import { issueCertificate, renewCertificate, getSslStatus } from '../services/ssl.js';
 import { duplicateApp, getServerInfo } from '../services/clone.js';
 import { deleteApp } from '../services/delete.js';
+import { repairSharedFrontend } from '../services/repair.js';
 
 const router = Router();
 
@@ -201,6 +202,19 @@ router.post('/:id/duplicate', async (req, res) => {
       sharedApiDomain,
     });
 
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/:id/repair-shared', async (req, res) => {
+  try {
+    const { sharedApiDomain, sourceAppId } = req.body;
+    const result = await repairSharedFrontend(req.params.id, {
+      sharedApiDomain,
+      sourceAppId,
+    });
     res.json(result);
   } catch (error) {
     res.status(500).json({ error: error.message });
