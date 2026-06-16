@@ -134,9 +134,6 @@ export default function SuccessBanner({ notification, onDismiss }) {
               Voir l'application
             </a>
           )}
-          <Link to={`/apps/${appId}`} className="btn btn-secondary">
-            Voir la nouvelle app
-          </Link>
           <Link to="/" className="btn btn-secondary">
             Retour à la liste
           </Link>
